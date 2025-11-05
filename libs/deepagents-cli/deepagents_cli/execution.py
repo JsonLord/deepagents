@@ -395,12 +395,19 @@ def execute_task(
                         elif block_type == "reasoning":
                             flush_text_buffer(final=True)
                             reasoning = block.get("reasoning", "")
-                            if reasoning:
+                            if reasoning and session_state.think:
                                 if spinner_active:
                                     status.stop()
                                     spinner_active = False
-                                # Could display reasoning differently if desired
-                                # For now, skip it or handle minimally
+                                console.print(
+                                    Panel(
+                                        Markdown(reasoning),
+                                        title="Thinking",
+                                        border_style="dim",
+                                        title_align="left",
+                                    )
+                                )
+
 
                         # Handle tool call chunks
                         elif block_type == "tool_call_chunk":

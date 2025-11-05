@@ -59,8 +59,9 @@ console = Console(highlight=False)
 class SessionState:
     """Holds mutable session state (auto-approve mode, etc)."""
 
-    def __init__(self, auto_approve: bool = False):
+    def __init__(self, auto_approve: bool = False, think: bool = False):
         self.auto_approve = auto_approve
+        self.think = think
 
     def toggle_auto_approve(self) -> bool:
         """Toggle auto-approve and return new state."""

@@ -14,6 +14,39 @@ from .tools import http_request, tavily_client, web_search
 from .ui import TokenTracker, show_help
 
 
+class Tee:
+    """A file-like object that writes to multiple files."""
+
+    def __init__(self, *files):
+        self.files = files
+        self._primary_stream = files[0]
+
+    def write(self, obj):
+        """Write to all files."""
+        for f in self.files:
+            f.write(obj)
+            f.flush()  # Ensure it's written immediately
+
+    def flush(self):
+        """Flush all files."""
+        for f in self.files:
+            f.flush()
+
+    def __getattr__(self, name):
+        """Delegate attribute access to the primary stream."""
+        return getattr(self._primary_stream, name)
+
+
+def get_log_filename(agent_name: str) -> Path:
+    """Generate a unique log filename."""
+    i = 1
+    while True:
+        filename = Path.cwd() / f"conversation_with_{agent_name}_{i}.txt"
+        if not filename.exists():
+            return filename
+        i += 1
+
+
 def check_cli_dependencies():
     """Check if CLI optional dependencies are installed."""
     missing = []
@@ -88,6 +121,16 @@ def parse_args():
         "--auto-approve",
         action="store_true",
         help="Auto-approve tool usage without prompting (disables human-in-the-loop)",
+    )
+    parser.add_argument(
+        "--think",
+        action="store_true",
+        help="Print reasoning for each step.",
+    )
+    parser.add_argument(
+        "--log-file",
+        action="store_true",
+        help="Save the conversation to a file.",
     )
 
     return parser.parse_args()
@@ -212,10 +255,21 @@ def cli_main():
             reset_agent(args.agent, args.source_agent)
         else:
             # Create session state from args
-            session_state = SessionState(auto_approve=args.auto_approve)
+            session_state = SessionState(auto_approve=args.auto_approve, think=args.think)
 
-            # API key validation happens in create_model()
-            asyncio.run(main(args.agent, session_state))
+            if args.log_file:
+                log_filename = get_log_filename(args.agent)
+                with open(log_filename, "w") as f:
+                    original_stdout = sys.stdout
+                    sys.stdout = Tee(sys.stdout, f)
+                    try:
+                        # API key validation happens in create_model()
+                        asyncio.run(main(args.agent, session_state))
+                    finally:
+                        sys.stdout = original_stdout
+            else:
+                # API key validation happens in create_model()
+                asyncio.run(main(args.agent, session_state))
     except KeyboardInterrupt:
         # Clean exit on Ctrl+C - suppress ugly traceback
         console.print("\n\n[yellow]Interrupted[/yellow]")
