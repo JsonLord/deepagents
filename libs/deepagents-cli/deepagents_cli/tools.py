@@ -127,7 +127,6 @@ def web_search(
             "error": "Tavily API key not configured. Please set TAVILY_API_KEY environment variable.",
             "query": query,
         }
-
     try:
         search_docs = tavily_client.search(
             query,
@@ -138,3 +137,63 @@ def web_search(
         return search_docs
     except Exception as e:
         return {"error": f"Web search error: {e!s}", "query": query}
+
+
+def chrome_navigate(url: str):
+    """Navigates to a URL in Chrome and returns the page title."""
+    import pychrome
+    try:
+        browser = pychrome.Browser(url="http://127.0.0.1:9222")
+        tab = browser.new_tab()
+        tab.start()
+        tab.call_method("Page.navigate", url=url, _timeout=5)
+        result = tab.call_method("Runtime.evaluate", expression="document.title")
+        title = result['result']['value']
+        tab.stop()
+        browser.close_tab(tab)
+        return f"Navigated to {url}. Page title: {title}"
+    except (pychrome.exceptions.ConnectionError, pychrome.exceptions.TimeoutException) as e:
+        return f"Error: Could not connect to Chrome. Make sure it's running with --remote-debugging-port=9222. Details: {e}"
+    except Exception as e:
+        return f"An unexpected error occurred: {e}"
+
+def websocket_send_command(uri: str, command: str):
+    """Sends a JSON command to a WebSocket server and returns the response."""
+    import websockets
+    import json
+    import asyncio
+    async def send_command():
+        try:
+            async with websockets.connect(uri) as websocket:
+                await websocket.send(command)
+                response = await websocket.recv()
+                return f"Sent command to {uri}. Response: {response}"
+        except Exception as e:
+            return f"An error occurred: {e}"
+    return asyncio.run(send_command())
+
+
+def appium_command(command: str, selector: str, selector_value: str, text_to_send: str = None, desired_caps: dict = None):
+    """Executes a command on the Appium server."""
+    from appium import webdriver
+    if desired_caps is None:
+        return "Error: desired_caps must be provided."
+    try:
+        driver = webdriver.Remote("http://localhost:4723/wd/hub", desired_caps)
+        element = driver.find_element(by=selector, value=selector_value)
+        if command == "click":
+            element.click()
+            return f"Clicked element with selector '{selector}' and value '{selector_value}'."
+        elif command == "send_keys":
+            if text_to_send is None:
+                return "Error: text_to_send must be provided for the 'send_keys' command."
+            element.send_keys(text_to_send)
+            return f"Sent keys to element with selector '{selector}' and value '{selector_value}'."
+        elif command == "get_text":
+            return element.text
+        elif command == "is_displayed":
+            return element.is_displayed()
+        else:
+            return f"Unknown command: {command}"
+    except Exception as e:
+        return f"An error occurred: {e}"

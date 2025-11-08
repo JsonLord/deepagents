@@ -22,7 +22,7 @@ deepagents-cli = "deepagents_cli:cli_main"
 [tool.uv.sources]
 deepagents = { workspace = true }
 
-[dependency-groups]
+[project.optional-dependencies]
 test = [
     "pytest>=8.3.4",
     "pytest-asyncio>=0.25.3",
@@ -32,8 +32,6 @@ test = [
     "pytest-timeout>=2.3.1",
     "ruff>=0.9.7",
 ]
-
-
 dev = [
     "pytest",
     "pytest-cov",
@@ -44,10 +42,16 @@ dev = [
     "pytest-socket>=0.7.0",
     "pytest-asyncio>=1.2.0",
 ]
-
 lint = [
     "ruff",
     "mypy"
+]
+web = [
+    "pychrome>=0.2.4",
+    "websockets>=12.0",
+]
+app = [
+    "Appium-Python-Client>=4.0.0",
 ]
 
 [build-system]

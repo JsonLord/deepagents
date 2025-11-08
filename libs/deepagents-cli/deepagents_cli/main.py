@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 from .agent import create_agent_with_config, list_agents, reset_agent
+from .app_mode import setup_app_mode
 from .commands import execute_bash_command, handle_command
+from .web_mode import setup_web_mode
 from .config import COLORS, DEEP_AGENTS_ASCII, SessionState, console, create_model
 from .execution import execute_task
 from .input import create_prompt_session
@@ -132,6 +134,11 @@ def parse_args():
         action="store_true",
         help="Save the conversation to a file.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["app", "web"],
+        help="Set the development mode to either 'app' or 'web'.",
+    )
 
     return parser.parse_args()
 
@@ -213,7 +220,7 @@ async def simple_cli(agent, assistant_id: str | None, session_state, baseline_to
         execute_task(user_input, agent, assistant_id, session_state, token_tracker)
 
 
-async def main(assistant_id: str, session_state):
+async def main(assistant_id: str, session_state, mode: str = None):
     """Main entry point."""
     # Create the model (checks API keys)
     model = create_model()
@@ -222,6 +229,11 @@ async def main(assistant_id: str, session_state):
     tools = [http_request]
     if tavily_client is not None:
         tools.append(web_search)
+
+    if mode == "app":
+        tools.extend(setup_app_mode())
+    elif mode == "web":
+        tools.extend(setup_web_mode())
 
     agent = create_agent_with_config(model, assistant_id, tools)
 
@@ -256,6 +268,10 @@ def cli_main():
         else:
             # Create session state from args
             session_state = SessionState(auto_approve=args.auto_approve, think=args.think)
+            if args.mode == "app":
+                setup_app_mode()
+            elif args.mode == "web":
+                setup_web_mode()
 
             if args.log_file:
                 log_filename = get_log_filename(args.agent)
@@ -264,12 +280,12 @@ def cli_main():
                     sys.stdout = Tee(sys.stdout, f)
                     try:
                         # API key validation happens in create_model()
-                        asyncio.run(main(args.agent, session_state))
+                        asyncio.run(main(args.agent, session_state, args.mode))
                     finally:
                         sys.stdout = original_stdout
             else:
                 # API key validation happens in create_model()
-                asyncio.run(main(args.agent, session_state))
+                asyncio.run(main(args.agent, session_state, args.mode))
     except KeyboardInterrupt:
         # Clean exit on Ctrl+C - suppress ugly traceback
         console.print("\n\n[yellow]Interrupted[/yellow]")
