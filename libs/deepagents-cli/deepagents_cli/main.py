@@ -3,6 +3,8 @@
 import argparse
 import asyncio
 import sys
+import subprocess
+import os
 from pathlib import Path
 
 from .agent import create_agent_with_config, list_agents, reset_agent
@@ -47,6 +49,23 @@ def get_log_filename(agent_name: str) -> Path:
         if not filename.exists():
             return filename
         i += 1
+
+
+def is_server_running(server_path):
+    """Check if the mcp-rest-api server is running."""
+    try:
+        result = subprocess.run([os.path.join(server_path, "mcp_server"), "status"], capture_output=True, text=True, check=True)
+        return "is running" in result.stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+def start_server():
+    """Start the mcp-rest-api server if it's not already running."""
+    server_path = Path(__file__).parent / "bin"
+    if not is_server_running(server_path):
+        console.print("[yellow]Starting mcp-rest-api server...[/yellow]")
+        subprocess.Popen([os.path.join(server_path, "mcp_server"), "start"])
+        console.print("[green]Server started.[/green]")
 
 
 def check_cli_dependencies():
@@ -253,6 +272,9 @@ async def main(assistant_id: str, session_state, mode: str = None):
 
 def cli_main():
     """Entry point for console script."""
+    # Start the mcp-rest-api server
+    start_server()
+
     # Check dependencies first
     check_cli_dependencies()
 
