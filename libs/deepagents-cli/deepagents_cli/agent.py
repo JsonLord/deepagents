@@ -138,7 +138,39 @@ When using the write_todos tool:
 The todo list is a planning tool - use it judiciously to avoid overwhelming the user with excessive task tracking."""
 
 
-def create_agent_with_config(model, assistant_id: str, tools: list):
+def create_persona_prompt(persona_data: dict) -> str:
+    """Create a system prompt from the persona data."""
+    persona = persona_data.get("persona", {})
+
+    # Safely get nested data
+    name = persona.get("name", "Agent")
+    occupation_desc = persona.get("occupation", {}).get("description", "")
+    style = persona.get("style", "")
+    personality_traits = persona.get("personality", {}).get("traits", [])
+    skills = persona.get("skills", [])
+    beliefs = persona.get("beliefs", [])
+    behaviors_general = persona.get("behaviors", {}).get("general", [])
+
+    # Build the prompt string
+    prompt_parts = [
+        f"You are {name}.",
+        occupation_desc,
+        f"Your communication style is: {style}",
+        "Your personality traits are:",
+        *['\n- ' + trait for trait in personality_traits],
+        "\nYour skills include:",
+        *['\n- ' + skill for skill in skills],
+        "\nYour beliefs are:",
+        *['\n- ' + belief for belief in beliefs],
+        "\nYour general behaviors are:",
+        *['\n- ' + behavior for behavior in behaviors_general]
+    ]
+
+    # Filter out empty parts and join
+    return "\n".join(filter(None, prompt_parts))
+
+
+def create_agent_with_config(model, assistant_id: str, tools: list, persona_prompt: str = None):
     """Create and configure an agent with the specified model and tools."""
     shell_middleware = ResumableShellToolMiddleware(
         workspace_root=os.getcwd(), execution_policy=HostExecutionPolicy()
@@ -169,6 +201,8 @@ def create_agent_with_config(model, assistant_id: str, tools: list):
 
     # Get the system prompt
     system_prompt = get_system_prompt()
+    if persona_prompt:
+        system_prompt = persona_prompt + "\n\n" + system_prompt
 
     # Helper functions for formatting tool descriptions in HITL prompts
     def format_write_file_description(tool_call: dict) -> str:

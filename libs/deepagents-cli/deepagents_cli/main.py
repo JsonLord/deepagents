@@ -5,9 +5,10 @@ import asyncio
 import sys
 import subprocess
 import os
+import json
 from pathlib import Path
 
-from .agent import create_agent_with_config, list_agents, reset_agent
+from .agent import create_agent_with_config, list_agents, reset_agent, create_persona_prompt
 from .app_mode import setup_app_mode
 from .commands import execute_bash_command, handle_command
 from .web_mode import setup_web_mode
@@ -239,7 +240,7 @@ async def simple_cli(agent, assistant_id: str | None, session_state, baseline_to
         execute_task(user_input, agent, assistant_id, session_state, token_tracker)
 
 
-async def main(assistant_id: str, session_state, mode: str = None):
+async def main(assistant_id: str, session_state, mode: str = None, persona_data: dict = None):
     """Main entry point."""
     # Create the model (checks API keys)
     model = create_model()
@@ -254,7 +255,11 @@ async def main(assistant_id: str, session_state, mode: str = None):
     elif mode == "web":
         tools.extend(setup_web_mode())
 
-    agent = create_agent_with_config(model, assistant_id, tools)
+    persona_prompt = None
+    if persona_data:
+        persona_prompt = create_persona_prompt(persona_data)
+
+    agent = create_agent_with_config(model, assistant_id, tools, persona_prompt=persona_prompt)
 
     # Calculate baseline token count for accurate token tracking
     from .agent import get_system_prompt
@@ -268,6 +273,52 @@ async def main(assistant_id: str, session_state, mode: str = None):
         await simple_cli(agent, assistant_id, session_state, baseline_tokens)
     except Exception as e:
         console.print(f"\n[bold red]❌ Error:[/bold red] {e}\n")
+
+
+def load_agent_persona(agent_name: str):
+    """Load agent persona from a JSON file."""
+    # Correctly determine the path to the agents directory relative to the current file
+    # The current file is in libs/deepagents-cli/deepagents_cli/
+    # We want to go to libs/TinyTroupe-main/examples/agents/
+    base_path = Path(__file__).parent.parent.parent
+    agents_dir = base_path / 'TinyTroupe-main' / 'examples' / 'agents'
+
+    if not agents_dir.exists():
+        console.print(f"[yellow]Persona directory not found at {agents_dir}. Skipping persona loading.[/yellow]")
+        return None
+
+    persona_file = None
+    for f in agents_dir.iterdir():
+        if f.stem.lower() == agent_name.lower() and f.suffix == '.json':
+            persona_file = f
+            break
+
+    if persona_file is None:
+        console.print(f"[yellow]Agent persona '{agent_name}' not found in the default directory.[/yellow]")
+        try:
+            user_path_str = input("Please enter the full path to the agent's .json file (or press Enter to skip): ")
+            if not user_path_str:
+                return None
+            user_path = Path(user_path_str)
+            if user_path.exists() and user_path.is_file():
+                persona_file = user_path
+            else:
+                console.print("[red]Invalid path. Continuing without a custom persona.[/red]")
+                return None
+        except EOFError:
+            console.print("\nInput cancelled. Continuing without a custom persona.")
+            return None
+
+
+    if persona_file:
+        try:
+            with open(persona_file, 'r') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, IOError) as e:
+            console.print(f"[bold red]Error loading persona file {persona_file}: {e}[/bold red]")
+            return None
+
+    return None
 
 
 def cli_main():
@@ -295,6 +346,8 @@ def cli_main():
             elif args.mode == "web":
                 setup_web_mode()
 
+            persona_data = load_agent_persona(args.agent)
+
             if args.log_file:
                 log_filename = get_log_filename(args.agent)
                 with open(log_filename, "w") as f:
@@ -302,12 +355,12 @@ def cli_main():
                     sys.stdout = Tee(sys.stdout, f)
                     try:
                         # API key validation happens in create_model()
-                        asyncio.run(main(args.agent, session_state, args.mode))
+                        asyncio.run(main(args.agent, session_state, args.mode, persona_data=persona_data))
                     finally:
                         sys.stdout = original_stdout
             else:
                 # API key validation happens in create_model()
-                asyncio.run(main(args.agent, session_state, args.mode))
+                asyncio.run(main(args.agent, session_state, args.mode, persona_data=persona_data))
     except KeyboardInterrupt:
         # Clean exit on Ctrl+C - suppress ugly traceback
         console.print("\n\n[yellow]Interrupted[/yellow]")
